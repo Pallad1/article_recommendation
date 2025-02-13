@@ -13,6 +13,8 @@ article2idx = None
 user_item_matrix = None
 
 def load_model_from_blob():
+    global model, user2idx, article2idx, user_item_matrix
+
     logging.info("Loading model and artifacts from Azure Blob Storage...")
     connect_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
     if not connect_str:
@@ -22,17 +24,32 @@ def load_model_from_blob():
     container_name = "models"
 
     try:
+        # Initialize BlobServiceClient
         blob_service_client = BlobServiceClient.from_connection_string(connect_str)
         container_client = blob_service_client.get_container_client(container_name)
 
-        # Download the model
+        # Download and load the ALS model
         model_blob_client = container_client.get_blob_client("model.pkl")
         with open("model.pkl", "wb") as download_file:
             download_file.write(model_blob_client.download_blob().readall())
         model = joblib.load("model.pkl")
         logging.info("Model loaded successfully.")
 
-        # Download the artifacts
+        # Download and load user factors
+        user_factors_blob_client = container_client.get_blob_client("user_factors.npy")
+        with open("user_factors.npy", "wb") as download_file:
+            download_file.write(user_factors_blob_client.download_blob().readall())
+        model.user_factors = np.load("user_factors.npy")
+        logging.info("User factors loaded successfully.")
+
+        # Download and load item factors
+        item_factors_blob_client = container_client.get_blob_client("item_factors.npy")
+        with open("item_factors.npy", "wb") as download_file:
+            download_file.write(item_factors_blob_client.download_blob().readall())
+        model.item_factors = np.load("item_factors.npy")
+        logging.info("Item factors loaded successfully.")
+
+        # Download and load artifacts
         artifacts_blob_client = container_client.get_blob_client("artifacts.json")
         with open("artifacts.json", "wb") as download_file:
             download_file.write(artifacts_blob_client.download_blob().readall())
@@ -40,18 +57,19 @@ def load_model_from_blob():
             artifacts = json.load(f)
         logging.info("Artifacts loaded successfully.")
 
+        # Extract user2idx and article2idx mappings
         user2idx = artifacts.get("user2idx", {})
         article2idx = artifacts.get("article2idx", {})
         if not user2idx or not article2idx:
             logging.warning("User or article indices are missing in artifacts.")
 
+        # Reconstruct the user-item matrix
         user_item_matrix = sp.coo_matrix(
             (artifacts["user_item_matrix"]["data"],
              (artifacts["user_item_matrix"]["row"],
               artifacts["user_item_matrix"]["col"])),
             shape=artifacts["user_item_matrix"]["shape"]
         ).tocsr()
-
         logging.info("User-item matrix successfully reconstructed.")
 
         return model, user2idx, article2idx, user_item_matrix
