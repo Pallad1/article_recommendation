@@ -102,6 +102,7 @@ def get_cf_recommendations(user_id, model, user2idx, article2idx, user_item_matr
 
 def my_function(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Python HTTP trigger function processed a request.')
+    
 
     user_id = req.params.get('user_id')
     if not user_id:
