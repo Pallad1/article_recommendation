@@ -5,6 +5,7 @@ from azure.storage.blob import BlobServiceClient
 import joblib
 import json
 import scipy.sparse as sp
+import numpy as np
 
 model = None
 user2idx = None
