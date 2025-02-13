@@ -1,5 +1,7 @@
 {
-  "bindings": [
+"scriptFile": "__init__.py",
+"entryPoint": "product_get",
+"bindings": [
     {
       "authLevel": "anonymous",
       "type": "httpTrigger",
