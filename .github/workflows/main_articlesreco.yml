@@ -75,5 +75,4 @@ jobs:
         id: deploy-to-function
         with:
           app-name: 'articlesreco'
-          slot-name: 'Production'
-          package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
+          package: release.zip

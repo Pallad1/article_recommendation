@@ -1,6 +1,6 @@
 {
 "scriptFile": "__init__.py",
-"entryPoint": "product_get",
+"entryPoint": "main",
 "bindings": [
     {
       "authLevel": "anonymous",
