@@ -42,6 +42,47 @@ def load_model_from_blob():
 
     return model, user2idx, article2idx, user_item_matrix
 
+def get_popular_articles(user_item_matrix, article2idx, num_articles):
+    article_popularity = user_item_matrix.sum(axis=0).A1
+    
+    idx2article = {idx: int(article) for article, idx in article2idx.items()}
+    
+    popular_article_indices = np.argsort(-article_popularity)
+    
+    popular_articles = [
+        idx2article[idx]
+        for idx in popular_article_indices[:num_articles]
+        if idx in idx2article
+    ]
+    
+    return popular_articles
+
+def get_cf_recommendations(user_id, model, user2idx, article2idx, user_item_matrix, n_items=5):
+    user_id = int(user_id)
+    if user_id not in user2idx:
+        return []
+    
+    user_idx = user2idx[user_id]
+    item_ids, scores = model.recommend(
+        user_idx,
+        user_item_matrix[user_idx],
+        N=n_items,
+        filter_already_liked_items=True
+    )
+    
+    idx2article = {idx: int(article) for article, idx in article2idx.items()}
+    recommended_articles = [
+        idx2article[int(idx)]
+        for idx in item_ids
+        if int(idx) in idx2article
+    ]
+    
+    if len(recommended_articles) < n_items:
+        popular_articles = get_popular_articles(user_item_matrix, article2idx, n_items - len(recommended_articles))
+        recommended_articles.extend(popular_articles)
+
+    return recommended_articles[:n_items]
+
 app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
 
 @app.route(route="product_get")
@@ -63,22 +104,3 @@ def product_get(req: func.HttpRequest) -> func.HttpResponse:
     recommended_articles = get_cf_recommendations(user_id, model, user2idx, article2idx, user_item_matrix)
 
     return func.HttpResponse(json.dumps(recommended_articles), mimetype="application/json")
-
-def get_cf_recommendations(user_id, model, user2idx, article2idx, user_item_matrix, n_items=5):
-    user_id = int(user_id)
-    if user_id not in user2idx:
-        return []
-    user_idx = user2idx[user_id]
-    item_ids, scores = model.recommend(
-        user_idx,
-        user_item_matrix[user_idx],
-        N=n_items,
-        filter_already_liked_items=True
-    )
-    idx2article = {idx: int(article) for article, idx in article2idx.items()}
-    recommended_articles = [
-        idx2article[int(idx)]
-        for idx in item_ids
-        if int(idx) in idx2article
-    ]
-    return recommended_articles
