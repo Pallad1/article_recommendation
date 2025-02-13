@@ -1,21 +1,22 @@
-from flask import Flask, request, render_template
+import streamlit as st
 import requests
 
-app = Flask(__name__)
+azure_function_url = "https://articlesreco.azurewebsites.net/api/product_get"
 
-AZURE_FUNCTION_URL = "https://articlesreco.azurewebsites.net/api/product_get"
+user_id = st.text_input("Renseigner l'ID utilisateur pour lequel vous souhaitez obtenir les 5 meilleures recommendations:")
 
-@app.route("/", methods=["GET", "POST"])
-def index():
-    if request.method == "POST":
-        user_id = request.form["user_id"]
-        response = requests.get(f"{AZURE_FUNCTION_URL}?user_id={user_id}")
-        if response.status_code == 200:
-            recommendations = response.json()
-            return render_template("index.html", recommendations=recommendations)
-        else:
-            return render_template("index.html", error="Failed to fetch recommendations.")
-    return render_template("index.html")
+if st.button("Get Recommendations"):
+    if user_id:
+        try:
+            # Send the HTTP request to the Azure Function
+            response = requests.get(azure_function_url, params={"user_id": user_id})
+            response.raise_for_status()  # Raise an exception for HTTP errors
+            recommended_articles = response.json()
 
-if __name__ == "__main__":
-    app.run(debug=True)
+            # Display the recommended articles
+            st.write("Recommended articles for user ID:", user_id)
+            st.write(recommended_articles)
+        except requests.exceptions.RequestException as e:
+            st.write("An error occurred while fetching recommendations:", e)
+    else:
+        st.write("Please enter a user ID.")
