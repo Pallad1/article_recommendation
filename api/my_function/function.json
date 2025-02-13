@@ -1,6 +1,6 @@
 {
 "scriptFile": "__init__.py",
-"entryPoint": "main",
+"entryPoint": "my_function",
 "bindings": [
     {
       "authLevel": "anonymous",
