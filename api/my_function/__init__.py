@@ -12,35 +12,52 @@ article2idx = None
 user_item_matrix = None
 
 def load_model_from_blob():
+    logging.info("Loading model and artifacts from Azure Blob Storage...")
     connect_str = os.getenv("AZURE_STORAGE_CONNECTION_STRING")
+    if not connect_str:
+        logging.error("AZURE_STORAGE_CONNECTION_STRING environment variable is not set.")
+        return None, None, None, None
+
     container_name = "models"
 
-    blob_service_client = BlobServiceClient.from_connection_string(connect_str)
-    container_client = blob_service_client.get_container_client(container_name)
+    try:
+        blob_service_client = BlobServiceClient.from_connection_string(connect_str)
+        container_client = blob_service_client.get_container_client(container_name)
 
-    # Download the model
-    model_blob_client = container_client.get_blob_client("model.pkl")
-    with open("model.pkl", "wb") as download_file:
-        download_file.write(model_blob_client.download_blob().readall())
-    model = joblib.load("model.pkl")
+        # Download the model
+        model_blob_client = container_client.get_blob_client("model.pkl")
+        with open("model.pkl", "wb") as download_file:
+            download_file.write(model_blob_client.download_blob().readall())
+        model = joblib.load("model.pkl")
+        logging.info("Model loaded successfully.")
 
-    # Download the artifacts
-    artifacts_blob_client = container_client.get_blob_client("artifacts.json")
-    with open("artifacts.json", "wb") as download_file:
-        download_file.write(artifacts_blob_client.download_blob().readall())
-    with open("artifacts.json", "r") as f:
-        artifacts = json.load(f)
-    
-    user2idx = artifacts["user2idx"]
-    article2idx = artifacts["article2idx"]
-    user_item_matrix = sp.coo_matrix(
-        (artifacts["user_item_matrix"]["data"],
-         (artifacts["user_item_matrix"]["row"],
-          artifacts["user_item_matrix"]["col"])),
-        shape=artifacts["user_item_matrix"]["shape"]
-    ).tocsr()
+        # Download the artifacts
+        artifacts_blob_client = container_client.get_blob_client("artifacts.json")
+        with open("artifacts.json", "wb") as download_file:
+            download_file.write(artifacts_blob_client.download_blob().readall())
+        with open("artifacts.json", "r") as f:
+            artifacts = json.load(f)
+        logging.info("Artifacts loaded successfully.")
 
-    return model, user2idx, article2idx, user_item_matrix
+        user2idx = artifacts.get("user2idx", {})
+        article2idx = artifacts.get("article2idx", {})
+        if not user2idx or not article2idx:
+            logging.warning("User or article indices are missing in artifacts.")
+
+        user_item_matrix = sp.coo_matrix(
+            (artifacts["user_item_matrix"]["data"],
+             (artifacts["user_item_matrix"]["row"],
+              artifacts["user_item_matrix"]["col"])),
+            shape=artifacts["user_item_matrix"]["shape"]
+        ).tocsr()
+
+        logging.info("User-item matrix successfully reconstructed.")
+
+        return model, user2idx, article2idx, user_item_matrix
+
+    except Exception as e:
+        logging.error(f"Failed to load model and artifacts: {e}")
+        return None, None, None, None
 
 def get_popular_articles(user_item_matrix, article2idx, num_articles):
     article_popularity = user_item_matrix.sum(axis=0).A1
@@ -83,8 +100,6 @@ def get_cf_recommendations(user_id, model, user2idx, article2idx, user_item_matr
 
     return recommended_articles[:n_items]
 
-app = func.FunctionApp(http_auth_level=func.AuthLevel.ANONYMOUS)
-
 @app.route(route="product_get")
 def product_get(req: func.HttpRequest) -> func.HttpResponse:
     logging.info('Python HTTP trigger function processed a request.')
@@ -98,9 +113,17 @@ def product_get(req: func.HttpRequest) -> func.HttpResponse:
 
     global model, user2idx, article2idx, user_item_matrix
     if model is None:
+        logging.info("Model is not loaded. Attempting to load from blob storage...")
         model, user2idx, article2idx, user_item_matrix = load_model_from_blob()
+        if model is None:
+            logging.error("Failed to load model from blob storage.")
+            return func.HttpResponse(
+                "Error loading model. Please check logs for details.",
+                status_code=500
+            )
 
     # Get recommendations
     recommended_articles = get_cf_recommendations(user_id, model, user2idx, article2idx, user_item_matrix)
+    logging.info(f"Recommended articles for user {user_id}: {recommended_articles}")
 
     return func.HttpResponse(json.dumps(recommended_articles), mimetype="application/json")
