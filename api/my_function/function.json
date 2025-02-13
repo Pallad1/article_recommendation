@@ -7,7 +7,7 @@
       "direction": "in",
       "name": "req",
       "methods": ["get"],
-      "route": "product_get"
+      "route": "my_function"
     },
     {
       "type": "http",
