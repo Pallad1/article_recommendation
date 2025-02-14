@@ -7,3 +7,4 @@ azure-storage-blob
 joblib
 scipy
 numpy
+implicit
