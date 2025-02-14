@@ -1,0 +1,25 @@
+# DO NOT include azure-functions-worker in this file
+# The Python Worker is managed by Azure Functions platform
+# Manually managing azure-functions-worker may cause unexpected issues
+
+azure-functions==1.21.3
+azure-storage-blob==12.24.1
+scipy==1.15.1
+numpy==2.2.3
+implicit==0.7.2
+## The following requirements were added by pip freeze:
+azure-core==1.32.0
+certifi==2025.1.31
+cffi==1.17.1
+charset-normalizer==3.4.1
+colorama==0.4.6
+cryptography==44.0.1
+idna==3.10
+isodate==0.7.2
+pycparser==2.22
+requests==2.32.3
+six==1.17.0
+threadpoolctl==3.5.0
+tqdm==4.67.1
+typing_extensions==4.12.2
+urllib3==2.3.0
