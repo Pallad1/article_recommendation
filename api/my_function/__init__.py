@@ -6,7 +6,9 @@ import joblib
 import json
 import scipy.sparse as sp
 import numpy as np
+from implicit import AlternatingLeastSquares
 
+# Global variables to store the loaded model and artifacts
 model = None
 user2idx = None
 article2idx = None
@@ -28,28 +30,26 @@ def load_model_from_blob():
         blob_service_client = BlobServiceClient.from_connection_string(connect_str)
         container_client = blob_service_client.get_container_client(container_name)
 
-        # Download and load the ALS model
-        model_blob_client = container_client.get_blob_client("model.pkl")
-        with open("model.pkl", "wb") as download_file:
+        # Download and load the ALS model (from cf_model.npz)
+        model_blob_client = container_client.get_blob_client("cf_model.npz")
+        with open("cf_model.npz", "wb") as download_file:
             download_file.write(model_blob_client.download_blob().readall())
-        model = joblib.load("model.pkl")
+        
+        # Load the model using implicit's built-in load method
+        model = AlternatingLeastSquares()
+        model.load("cf_model.npz")
         logging.info("Model loaded successfully.")
 
-        # Download and load user factors
-        user_factors_blob_client = container_client.get_blob_client("user_factors.npy")
-        with open("user_factors.npy", "wb") as download_file:
-            download_file.write(user_factors_blob_client.download_blob().readall())
-        model.user_factors = np.load("user_factors.npy")
-        logging.info("User factors loaded successfully.")
+        # Download and load the user-item matrix (from user_item_matrix.npz)
+        matrix_blob_client = container_client.get_blob_client("user_item_matrix.npz")
+        with open("user_item_matrix.npz", "wb") as download_file:
+            download_file.write(matrix_blob_client.download_blob().readall())
+        
+        # Load the user-item matrix from the .npz file
+        user_item_matrix = sp.load_npz("user_item_matrix.npz")
+        logging.info("User-item matrix loaded successfully.")
 
-        # Download and load item factors
-        item_factors_blob_client = container_client.get_blob_client("item_factors.npy")
-        with open("item_factors.npy", "wb") as download_file:
-            download_file.write(item_factors_blob_client.download_blob().readall())
-        model.item_factors = np.load("item_factors.npy")
-        logging.info("Item factors loaded successfully.")
-
-        # Download and load artifacts
+        # Download and load artifacts (from artifacts.json)
         artifacts_blob_client = container_client.get_blob_client("artifacts.json")
         with open("artifacts.json", "wb") as download_file:
             download_file.write(artifacts_blob_client.download_blob().readall())
@@ -62,15 +62,6 @@ def load_model_from_blob():
         article2idx = artifacts.get("article2idx", {})
         if not user2idx or not article2idx:
             logging.warning("User or article indices are missing in artifacts.")
-
-        # Reconstruct the user-item matrix
-        user_item_matrix = sp.coo_matrix(
-            (artifacts["user_item_matrix"]["data"],
-             (artifacts["user_item_matrix"]["row"],
-              artifacts["user_item_matrix"]["col"])),
-            shape=artifacts["user_item_matrix"]["shape"]
-        ).tocsr()
-        logging.info("User-item matrix successfully reconstructed.")
 
         return model, user2idx, article2idx, user_item_matrix
 
