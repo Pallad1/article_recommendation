@@ -90,29 +90,41 @@ def get_popular_articles(user_item_matrix, article2idx, num_articles):
     return popular_articles
 
 def get_cf_recommendations(user_id, model, user2idx, article2idx, user_item_matrix, n_items=5):
-    user_id = int(user_id)
+    user_id = str(user_id)  # Convert user_id to string to match user2idx keys
     if user_id not in user2idx:
+        logging.warning(f"User ID {user_id} not found in user2idx.")
         return []
     
-    user_idx = user2idx[user_id]
+    user_idx = user2idx[user_id]  # Get the user index from user2idx
+    logging.info(f"Generating recommendations for user {user_id} (user index: {user_idx})...")
+    
+    # Check the user-item matrix for the user
+    logging.info(f"user_item_matrix[user_idx]: {user_item_matrix[user_idx].toarray()}")
+    
     item_ids, scores = model.recommend(
         user_idx,
         user_item_matrix[user_idx],
         N=n_items,
         filter_already_liked_items=True
     )
+    logging.info(f"Model recommendations: {item_ids}, Scores: {scores}")
     
-    idx2article = {idx: int(article) for article, idx in article2idx.items()}
+    # Convert item_ids (which are indices) back to article IDs using article2idx
+    idx2article = {idx: str(article) for article, idx in article2idx.items()}  # Map indices to article IDs (as strings)
     recommended_articles = [
-        idx2article[int(idx)]
+        idx2article.get(str(int(idx)), None)  # Ensure idx is treated as a string
         for idx in item_ids
-        if int(idx) in idx2article
+        if str(int(idx)) in idx2article  # Check if the index exists in idx2article
     ]
     
+    logging.info(f"Recommended articles: {recommended_articles}")
+    
     if len(recommended_articles) < n_items:
+        logging.info(f"Not enough recommendations. Adding popular articles.")
         popular_articles = get_popular_articles(user_item_matrix, article2idx, n_items - len(recommended_articles))
         recommended_articles.extend(popular_articles)
-
+    
+    logging.info(f"Final recommended articles: {recommended_articles}")
     return recommended_articles[:n_items]
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
