@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 
-azure_function_url = "http://articlesreco.azurewebsites.net/api/my_function/product_get"
+azure_function_url = "http://articlesreco.azurewebsites.net/api/my_function"
 
 user_id = st.text_input("Renseigner l'ID utilisateur pour lequel vous souhaitez obtenir les 5 meilleures recommendations:")
 
