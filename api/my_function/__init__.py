@@ -29,14 +29,15 @@ def load_model_from_blob():
         blob_service_client = BlobServiceClient.from_connection_string(connect_str)
         container_client = blob_service_client.get_container_client(container_name)
 
-        # Download and load the ALS model (from cf_model.npz)
-        model_blob_client = container_client.get_blob_client("cf_model.npz")
-        with open("cf_model.npz", "wb") as download_file:
-            download_file.write(model_blob_client.download_blob().readall())
+        # Load the ALS model's user and item factors
+        model_data = np.load("cf_model.npz")
+        user_factors = model_data['user_factors']
+        item_factors = model_data['item_factors']
         
-        # Load the model using implicit's built-in load method
-        model = AlternatingLeastSquares()
-        model.load("cf_model.npz")
+        # Reconstruct the model (Implicit ALS)
+        model = AlternatingLeastSquares(factors=user_factors.shape[1])
+        model.user_factors = user_factors
+        model.item_factors = item_factors
         logging.info("Model loaded successfully.")
 
         # Download and load the user-item matrix (from user_item_matrix.npz)
