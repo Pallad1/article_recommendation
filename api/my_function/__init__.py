@@ -128,7 +128,7 @@ def get_cf_recommendations(user_id, model, user2idx, article2idx, user_item_matr
     return recommended_articles[:n_items]
 
 def main(req: func.HttpRequest) -> func.HttpResponse:
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.DEBUG)
     logging.info('Python HTTP trigger function processed a request.')
     
 
