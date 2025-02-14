@@ -2,11 +2,10 @@ import azure.functions as func
 import logging
 import os
 from azure.storage.blob import BlobServiceClient
-import joblib
 import json
 import scipy.sparse as sp
 import numpy as np
-from implicit import AlternatingLeastSquares
+from implicit.als import AlternatingLeastSquares
 
 # Global variables to store the loaded model and artifacts
 model = None
