@@ -1,6 +1,7 @@
 import azure.functions as func
 import logging
 import os
+import tempfile
 from azure.storage.blob import BlobServiceClient
 import json
 import scipy.sparse as sp
@@ -28,45 +29,59 @@ def load_model_from_blob():
         # Initialize BlobServiceClient
         blob_service_client = BlobServiceClient.from_connection_string(connect_str)
         container_client = blob_service_client.get_container_client(container_name)
-
-        # Download and load the ALS model (from cf_model.npz)
-        model_blob_client = container_client.get_blob_client("cf_model.npz")
-        with open("cf_model.npz", "wb") as download_file:
-            download_file.write(model_blob_client.download_blob().readall())
-
-        # Load the ALS model's user and item factors
-        model_data = np.load("cf_model.npz")
-        user_factors = model_data['user_factors']
-        item_factors = model_data['item_factors']
+        if not container_client.exists():
+            logging.error(f"Container '{container_name}' does not exist.")
+            return None, None, None, None
         
-        # Reconstruct the model (Implicit ALS)
-        model = AlternatingLeastSquares(factors=user_factors.shape[1])
-        model.user_factors = user_factors
-        model.item_factors = item_factors
-        logging.info("Model loaded successfully.")
+        logging.info("Connected to Azure Blob Storage.")
 
-        # Download and load the user-item matrix (from user_item_matrix.npz)
-        matrix_blob_client = container_client.get_blob_client("user_item_matrix.npz")
-        with open("user_item_matrix.npz", "wb") as download_file:
-            download_file.write(matrix_blob_client.download_blob().readall())
-        
-        # Load the user-item matrix from the .npz file
-        user_item_matrix = sp.load_npz("user_item_matrix.npz")
-        logging.info("User-item matrix loaded successfully.")
+        # Create a temporary directory using tempfile
+        with tempfile.TemporaryDirectory() as temp_dir:
+            temp_model_path = os.path.join(temp_dir, "cf_model.npz")
+            temp_usrmatrix_path = os.path.join(temp_dir, "user_item_matrix.npz")
+            temp_artifacts_path = os.path.join(temp_dir, "artifacts.json")
 
-        # Download and load artifacts (from artifacts.json)
-        artifacts_blob_client = container_client.get_blob_client("artifacts.json")
-        with open("artifacts.json", "wb") as download_file:
-            download_file.write(artifacts_blob_client.download_blob().readall())
-        with open("artifacts.json", "r") as f:
-            artifacts = json.load(f)
-        logging.info("Artifacts loaded successfully.")
+            logging.info(f"Temporary directory created at: {temp_dir}")
 
-        # Extract user2idx and article2idx mappings
-        user2idx = artifacts.get("user2idx", {})
-        article2idx = artifacts.get("article2idx", {})
-        if not user2idx or not article2idx:
-            logging.warning("User or article indices are missing in artifacts.")
+            # Download and load the ALS model (from cf_model.npz)
+            model_blob_client = container_client.get_blob_client("cf_model.npz")
+            with open(temp_model_path, "wb") as download_file:
+                download_file.write(model_blob_client.download_blob().readall())
+            logging.info("Model downloaded successfully.")
+
+            # Load the ALS model's user and item factors
+            model_data = np.load(temp_model_path)  # Fixed path
+            user_factors = model_data['user_factors']
+            item_factors = model_data['item_factors']
+            
+            # Reconstruct the model (Implicit ALS)
+            model = AlternatingLeastSquares(factors=user_factors.shape[1])
+            model.user_factors = user_factors
+            model.item_factors = item_factors
+            logging.info("Model loaded successfully.")
+
+            # Download and load the user-item matrix (from user_item_matrix.npz)
+            matrix_blob_client = container_client.get_blob_client("user_item_matrix.npz")
+            with open(temp_usrmatrix_path, "wb") as download_file:
+                download_file.write(matrix_blob_client.download_blob().readall())
+
+            # Load the user-item matrix from the .npz file
+            user_item_matrix = sp.load_npz(temp_usrmatrix_path)  # Fixed path
+            logging.info("User-item matrix loaded successfully.")
+
+            # Download and load artifacts (from artifacts.json)
+            artifacts_blob_client = container_client.get_blob_client("artifacts.json")
+            with open(temp_artifacts_path, "wb") as download_file:
+                download_file.write(artifacts_blob_client.download_blob().readall())
+            with open(temp_artifacts_path, "r") as f:
+                artifacts = json.load(f)
+            logging.info("Artifacts loaded successfully.")
+
+            # Extract user2idx and article2idx mappings
+            user2idx = artifacts.get("user2idx", {})
+            article2idx = artifacts.get("article2idx", {})
+            if not user2idx or not article2idx:
+                logging.warning("User or article indices are missing in artifacts.")
 
         return model, user2idx, article2idx, user_item_matrix
 
@@ -98,12 +113,13 @@ def get_cf_recommendations(user_id, model, user2idx, article2idx, user_item_matr
     user_idx = user2idx[user_id]  # Get the user index from user2idx
     logging.info(f"Generating recommendations for user {user_id} (user index: {user_idx})...")
     
-    # Check the user-item matrix for the user
-    logging.info(f"user_item_matrix[user_idx]: {user_item_matrix[user_idx].toarray()}")
-    
+    # Check if the user has interactions in the user-item matrix
+    user_data = user_item_matrix[user_idx]  # Ensure this works correctly with sparse matrices
+    logging.info(f"user_item_matrix[user_idx]: {user_data.toarray() if user_data.nnz else 'No interactions'}")
+
     item_ids, scores = model.recommend(
         user_idx,
-        user_item_matrix[user_idx],
+        user_data,
         N=n_items,
         filter_already_liked_items=True
     )
@@ -112,9 +128,9 @@ def get_cf_recommendations(user_id, model, user2idx, article2idx, user_item_matr
     # Convert item_ids (which are indices) back to article IDs using article2idx
     idx2article = {idx: str(article) for article, idx in article2idx.items()}  # Map indices to article IDs (as strings)
     recommended_articles = [
-        idx2article.get(str(int(idx)), None)  # Ensure idx is treated as a string
+        idx2article.get(idx, None)  # Ensure idx is treated as a string
         for idx in item_ids
-        if str(int(idx)) in idx2article  # Check if the index exists in idx2article
+        if idx in idx2article  # Check if the index exists in idx2article
     ]
     
     logging.info(f"Recommended articles: {recommended_articles}")
