@@ -1,7 +1,9 @@
 # Data
 data/
 api/utils/
-test.ipynb
+artifacts.json
+user_item_matrix.npz
+cf_model.npz
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
