@@ -8,7 +8,7 @@ import scipy.sparse as sp
 import numpy as np
 from implicit.als import AlternatingLeastSquares
 
-# Global variables to store the loaded model and artifacts
+# Global storage variables for model and artifacts
 model = None
 user2idx = None
 article2idx = None
@@ -35,7 +35,7 @@ def load_model_from_blob():
         
         logging.info("Connected to Azure Blob Storage.")
 
-        # Create a temporary directory using tempfile
+        # Temporary directory using tempfile
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_model_path = os.path.join(temp_dir, "cf_model.npz")
             temp_usrmatrix_path = os.path.join(temp_dir, "user_item_matrix.npz")
@@ -50,7 +50,7 @@ def load_model_from_blob():
             logging.info("Model downloaded successfully.")
 
             # Load the ALS model's user and item factors
-            model_data = np.load(temp_model_path)  # Fixed path
+            model_data = np.load(temp_model_path)
             user_factors = model_data['user_factors']
             item_factors = model_data['item_factors']
             
@@ -66,7 +66,7 @@ def load_model_from_blob():
                 download_file.write(matrix_blob_client.download_blob().readall())
 
             # Load the user-item matrix from the .npz file
-            user_item_matrix = sp.load_npz(temp_usrmatrix_path)  # Fixed path
+            user_item_matrix = sp.load_npz(temp_usrmatrix_path)
             logging.info("User-item matrix loaded successfully.")
 
             # Download and load artifacts (from artifacts.json)
@@ -105,16 +105,15 @@ def get_popular_articles(user_item_matrix, article2idx, num_articles):
     return popular_articles
 
 def get_cf_recommendations(user_id, model, user2idx, article2idx, user_item_matrix, n_items=5):
-    user_id = str(user_id)  # Convert user_id to string to match user2idx keys
+    user_id = str(user_id)
     if user_id not in user2idx:
         logging.warning(f"User ID {user_id} not found in user2idx.")
         return []
     
-    user_idx = user2idx[user_id]  # Get the user index from user2idx
+    user_idx = user2idx[user_id]
     logging.info(f"Generating recommendations for user {user_id} (user index: {user_idx})...")
     
-    # Check if the user has interactions in the user-item matrix
-    user_data = user_item_matrix[user_idx]  # Ensure this works correctly with sparse matrices
+    user_data = user_item_matrix[user_idx]
     logging.info(f"user_item_matrix[user_idx]: {user_data.toarray() if user_data.nnz else 'No interactions'}")
 
     item_ids, scores = model.recommend(
@@ -125,12 +124,11 @@ def get_cf_recommendations(user_id, model, user2idx, article2idx, user_item_matr
     )
     logging.info(f"Model recommendations: {item_ids}, Scores: {scores}")
     
-    # Convert item_ids (which are indices) back to article IDs using article2idx
-    idx2article = {idx: str(article) for article, idx in article2idx.items()}  # Map indices to article IDs (as strings)
+    idx2article = {idx: str(article) for article, idx in article2idx.items()}
     recommended_articles = [
-        idx2article.get(idx, None)  # Ensure idx is treated as a string
+        idx2article.get(idx, None)
         for idx in item_ids
-        if idx in idx2article  # Check if the index exists in idx2article
+        if idx in idx2article
     ]
     
     logging.info(f"Recommended articles: {recommended_articles}")
@@ -155,6 +153,7 @@ def main(req: func.HttpRequest) -> func.HttpResponse:
             status_code=400
         )
 
+    # Load model and artifacts if not already loaded
     global model, user2idx, article2idx, user_item_matrix
     if model is None:
         logging.info("Model is not loaded. Attempting to load from blob storage...")
